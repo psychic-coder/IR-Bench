@@ -1,0 +1,121 @@
+# Fast benchmark: every ablation with a small grid and reduced input resolution.
+# Intended to be run with DATASET_SUBSET=300 (make bench-fast) so it finishes in minutes on
+# a laptop CPU. Without a subset it runs the same grid on the full datasets.
+name: fast
+seed: 42
+datasets: [oxford5k, paris6k]
+protocols: [revisited]
+subset: null            # overridden by the DATASET_SUBSET env var
+eval_depth: 1000        # ranked-list depth used for mAP (capped at the database size)
+ann_recall_k: 10        # k for neighbour recall of approximate indexes vs exact search
+warmup_queries: 5       # untimed warm-up queries before every timed loop
+batch_size: 16
+device: auto            # auto | cpu | cuda (the DEVICE env var wins when not 'auto')
+hard_query_ap_threshold: 0.3
+hard_query_top: 20
+headline: {protocol: revisited, setup: medium}
+distractors:
+  dir: null             # default: DISTRACTOR_DIR or DATA_DIR/distractors
+  download_archives: 0  # fast mode does not download revisitop1m archives
+  max_size: 1000
+  synthetic_for_toy: true
+
+defaults:
+  extractor: {name: dinov2_vits14, image_size: 224}
+  pooling: {name: null, p: 3.0}
+  postprocess: {pca: none, dim: null}
+  index: {type: flat, params: {}}
+  rerank:
+    name: none
+    params:
+      aqe: {top_n: 3}
+      alpha_qe: {top_n: 3, alpha: 3.0}
+      sv: {top_k: 20, min_inliers: 12}
+  distractors: 0
+
+experiments:
+  - name: families
+    ablation: i
+    protocols: [revisited, original]
+    runs:
+      - {extractor: {name: hog, image_size: null}}
+      - {extractor: {name: hsv_hist, image_size: null}}
+      - {extractor: {name: resnet50, image_size: 320}, pooling: {name: gem}}
+      - {extractor: {name: efficientnet_b0, image_size: 320}, pooling: {name: gem}}
+      - {extractor: {name: dinov2_vits14, image_size: 224}, pooling: {name: cls}}
+
+  - name: pooling_cnn
+    ablation: b
+    base: {extractor: {name: resnet50, image_size: 320}}
+    grid:
+      pooling.name: [gap, gem, rmac]
+
+  - name: pooling_vit
+    ablation: b
+    base: {extractor: {name: dinov2_vits14, image_size: 224}}
+    grid:
+      pooling.name: [cls, patch_gem, patch_gap]
+
+  - name: gem_p_sweep
+    ablation: b
+    base: {extractor: {name: resnet50, image_size: 320}, pooling: {name: gem}}
+    grid:
+      pooling.p: [1.0, 3.0, 5.0]
+
+  - name: multiscale
+    ablation: j
+    base: {extractor: {name: resnet50, image_size: 320}, pooling: {name: gem}}
+    grid:
+      extractor.scales: [[1.0], [1.0, 0.7071, 1.4142]]
+
+  - name: pca_whitening
+    ablation: g
+    base: {extractor: {name: dinov2_vits14, image_size: 224}, pooling: {name: cls}}
+    runs:
+      - {postprocess: {pca: none}}
+      - {postprocess: {pca: pca, dim: 128}}
+      - {postprocess: {pca: whiten, dim: 64}}
+      - {postprocess: {pca: whiten, dim: 128}}
+      - {postprocess: {pca: whiten, dim: null}}
+
+  - name: hnsw_ef
+    ablation: c
+    base:
+      extractor: {name: dinov2_vits14, image_size: 224}
+      pooling: {name: cls}
+      index: {type: hnsw, params: {m: 16, ef_construct: 128}}
+    grid:
+      index.params.ef: [1, 2, 4, 8, 16, 32, 64, 128]
+
+  - name: ivfpq_nprobe
+    ablation: d
+    base:
+      extractor: {name: dinov2_vits14, image_size: 224}
+      pooling: {name: cls}
+      index: {type: ivfpq, params: {nlist: 64, m: 32, nbits: 8}}
+    grid:
+      index.params.nprobe: [1, 2, 4, 8, 16, 64]
+
+  - name: ivfpq_memory
+    ablation: a
+    base: {extractor: {name: dinov2_vits14, image_size: 224}, pooling: {name: cls}}
+    runs:
+      - {index: {type: flat}}
+      - {index: {type: ivfpq, params: {nlist: 16, m: 96, nbits: 8, nprobe: 16}}}
+      - {index: {type: ivfpq, params: {nlist: 16, m: 48, nbits: 8, nprobe: 16}}}
+      - {index: {type: ivfpq, params: {nlist: 16, m: 16, nbits: 8, nprobe: 16}}}
+      - {index: {type: ivfpq, params: {nlist: 16, m: 8, nbits: 8, nprobe: 16}}}
+      - {index: {type: ivfpq, params: {nlist: 16, m: 4, nbits: 8, nprobe: 16}}}
+
+  - name: reranking
+    ablation: f
+    base: {extractor: {name: dinov2_vits14, image_size: 224}, pooling: {name: cls}}
+    grid:
+      rerank.name: [none, aqe, alpha_qe, sv, aqe+sv]
+
+  - name: scale
+    ablation: h
+    datasets: [oxford5k]
+    base: {extractor: {name: dinov2_vits14, image_size: 224}, pooling: {name: cls}}
+    grid:
+      distractors: [0, 1000]

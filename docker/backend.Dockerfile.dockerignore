@@ -1,0 +1,15 @@
+# Build context = repository root; only what the backend image needs is sent.
+*
+!backend/requirements.lock
+!backend/requirements-dev.lock
+!backend/pyproject.toml
+!ruff.toml
+!backend/src/
+!configs/
+!scripts/
+!tests/
+**/__pycache__
+**/*.pyc
+**/*.egg-info
+**/.pytest_cache
+**/.ruff_cache

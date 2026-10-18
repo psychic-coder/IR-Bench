@@ -1,0 +1,140 @@
+# Full benchmark: complete grid at standard resolutions on the full ROxford5k / RParis6k.
+# Expect hours on CPU (see README "Fast vs full mode"); a CUDA GPU shortens extraction a lot.
+name: full
+seed: 42
+datasets: [oxford5k, paris6k]
+protocols: [revisited]
+subset: null
+eval_depth: 1000
+ann_recall_k: 10
+warmup_queries: 10
+batch_size: 16
+device: auto
+hard_query_ap_threshold: 0.3
+hard_query_top: 20
+headline: {protocol: revisited, setup: medium}
+distractors:
+  dir: null
+  download_archives: 1    # first revisitop1m archive (~10k images); more archives -> larger pool
+  max_size: 10000
+  synthetic_for_toy: true
+
+defaults:
+  extractor: {name: dinov2_vits14, image_size: 448}
+  pooling: {name: null, p: 3.0}
+  postprocess: {pca: none, dim: null}
+  index: {type: flat, params: {}}
+  rerank:
+    name: none
+    params:
+      aqe: {top_n: 3}
+      alpha_qe: {top_n: 3, alpha: 3.0}
+      sv: {top_k: 50, min_inliers: 12}
+  distractors: 0
+
+experiments:
+  - name: families
+    ablation: i
+    protocols: [revisited, original]
+    runs:
+      - {extractor: {name: hog, image_size: null}}
+      - {extractor: {name: hsv_hist, image_size: null}}
+      - {extractor: {name: resnet50, image_size: 512}, pooling: {name: gem}}
+      - {extractor: {name: resnet50, image_size: 512}, pooling: {name: rmac}}
+      - {extractor: {name: efficientnet_b0, image_size: 512}, pooling: {name: gem}}
+      - {extractor: {name: dinov2_vits14, image_size: 448}, pooling: {name: cls}}
+      - {extractor: {name: dinov2_vits14, image_size: 448}, pooling: {name: patch_gem}}
+      - {extractor: {name: clip_vitb32}, pooling: {name: cls}}
+
+  - name: pooling_cnn
+    ablation: b
+    grid:
+      extractor: [{name: resnet50, image_size: 512}, {name: efficientnet_b0, image_size: 512}]
+      pooling.name: [gap, gem, rmac]
+
+  - name: pooling_vit
+    ablation: b
+    grid:
+      extractor: [{name: dinov2_vits14, image_size: 448}, {name: clip_vitb32}]
+      pooling.name: [cls, patch_gem, patch_gap]
+
+  - name: gem_p_sweep
+    ablation: b
+    base: {pooling: {name: gem}}
+    grid:
+      extractor: [{name: resnet50, image_size: 512}, {name: efficientnet_b0, image_size: 512}]
+      pooling.p: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0]
+
+  - name: multiscale
+    ablation: j
+    grid:
+      extractor:
+        - {name: resnet50, image_size: 512, scales: [1.0]}
+        - {name: resnet50, image_size: 512, scales: [1.0, 0.7071, 1.4142]}
+        - {name: dinov2_vits14, image_size: 448, scales: [1.0]}
+        - {name: dinov2_vits14, image_size: 448, scales: [1.0, 0.7071, 1.4142]}
+      pooling.name: [null]
+
+  - name: pca_whitening
+    ablation: g
+    grid:
+      extractor: [{name: resnet50, image_size: 512}, {name: dinov2_vits14, image_size: 448}]
+      postprocess:
+        - {pca: none, dim: null}
+        - {pca: pca, dim: 128}
+        - {pca: pca, dim: 256}
+        - {pca: whiten, dim: 128}
+        - {pca: whiten, dim: 256}
+        - {pca: whiten, dim: 512}
+        - {pca: whiten, dim: null}
+
+  - name: hnsw_ef
+    ablation: c
+    base: {pooling: {name: null}}
+    grid:
+      extractor: [{name: dinov2_vits14, image_size: 448}, {name: resnet50, image_size: 512}]
+      index: [{type: hnsw, params: {m: 8, ef_construct: 128}}, {type: hnsw, params: {m: 16, ef_construct: 128}}, {type: hnsw, params: {m: 32, ef_construct: 256}}]
+      index.params.ef: [1, 2, 4, 8, 16, 32, 64, 128, 256]
+
+  - name: ivfpq_nprobe
+    ablation: d
+    grid:
+      extractor: [{name: dinov2_vits14, image_size: 448}, {name: resnet50, image_size: 512}]
+      index: [{type: ivfpq, params: {nlist: 128, m: 32, nbits: 8}}]
+      index.params.nprobe: [1, 2, 4, 8, 16, 32, 64, 128]
+
+  - name: ivfpq_memory
+    ablation: a
+    grid:
+      extractor: [{name: dinov2_vits14, image_size: 448}]
+      index:
+        - {type: flat, params: {}}
+        - {type: ivfpq, params: {nlist: 64, m: 192, nbits: 8, nprobe: 32}}
+        - {type: ivfpq, params: {nlist: 64, m: 96, nbits: 8, nprobe: 32}}
+        - {type: ivfpq, params: {nlist: 64, m: 48, nbits: 8, nprobe: 32}}
+        - {type: ivfpq, params: {nlist: 64, m: 24, nbits: 8, nprobe: 32}}
+        - {type: ivfpq, params: {nlist: 64, m: 16, nbits: 8, nprobe: 32}}
+        - {type: ivfpq, params: {nlist: 64, m: 8, nbits: 8, nprobe: 32}}
+        - {type: ivfpq, params: {nlist: 64, m: 4, nbits: 8, nprobe: 32}}
+
+  - name: ivfpq_memory_cnn
+    ablation: a
+    base: {extractor: {name: resnet50, image_size: 512}, pooling: {name: gem}}
+    grid:
+      index:
+        - {type: flat, params: {}}
+        - {type: ivfpq, params: {nlist: 64, m: 256, nbits: 8, nprobe: 32}}
+        - {type: ivfpq, params: {nlist: 64, m: 64, nbits: 8, nprobe: 32}}
+        - {type: ivfpq, params: {nlist: 64, m: 16, nbits: 8, nprobe: 32}}
+
+  - name: reranking
+    ablation: f
+    grid:
+      extractor: [{name: dinov2_vits14, image_size: 448}, {name: resnet50, image_size: 512}]
+      rerank.name: [none, aqe, alpha_qe, sv, aqe+sv]
+
+  - name: scale
+    ablation: h
+    grid:
+      extractor: [{name: dinov2_vits14, image_size: 448}, {name: resnet50, image_size: 512}]
+      distractors: [0, 2500, 5000, 10000]

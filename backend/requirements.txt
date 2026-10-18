@@ -1,0 +1,25 @@
+# Runtime dependencies for the irbench backend (API + benchmark).
+# torch / torchvision are installed separately in docker/backend.Dockerfile so the
+# CPU or CUDA wheel index can be chosen with the TORCH_VARIANT build argument.
+numpy==1.26.4
+pillow==11.0.0
+opencv-python-headless==4.10.0.84
+scikit-image==0.24.0
+faiss-cpu==1.9.0
+qdrant-client==1.12.1
+redis==5.2.1
+transformers==4.46.3
+huggingface-hub==0.26.5
+safetensors==0.4.5
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+pydantic-settings==2.6.1
+python-multipart==0.0.19
+prometheus-client==0.21.1
+pyyaml==6.0.2
+matplotlib==3.9.3
+pyparsing==3.2.0
+requests==2.32.3
+tqdm==4.67.1
+psutil==6.1.0

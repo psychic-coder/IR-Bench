@@ -1,0 +1,31 @@
+# Offline serving configuration used by CI (API_CONFIG=api.ci.yaml): serves the generated
+# toy dataset with classical extractors and a random-initialised CNN, so no dataset or
+# model-weight downloads are needed. Not meant for real retrieval.
+dataset: toy_a
+protocol: revisited
+pca_whitening: false
+
+backbones:
+  - {name: hsv_hist, poolings: [none], default_pooling: none}
+  - {name: hog, poolings: [none], default_pooling: none}
+  - {name: resnet50, image_size: 128, pretrained: false, poolings: [gem, gap, rmac], default_pooling: gem}
+
+indexes: [flat, hnsw, ivfpq]
+rerankers: [none, aqe, alpha_qe, sv, aqe+sv]
+
+prebuild:
+  - {backbone: hsv_hist, pooling: none, index: flat}
+  - {backbone: hsv_hist, pooling: none, index: hnsw}
+
+index_defaults:
+  flat: {}
+  hnsw: {m: 8, ef_construct: 64, ef: 32}
+  ivfpq: {nlist: 2, m: 16, nbits: 4, nprobe: 2}
+
+rerank_defaults:
+  aqe: {top_n: 2}
+  alpha_qe: {top_n: 2, alpha: 3.0}
+  sv: {top_k: 10, min_inliers: 8}
+
+default_k: 10
+max_k: 50

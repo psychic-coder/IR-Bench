@@ -1,0 +1,35 @@
+# Serving configuration for the FastAPI service (loaded via API_CONFIG, default api.yaml).
+dataset: oxford5k          # oxford5k | paris6k | toy_a | toy_b  (API_DATASET env overrides)
+protocol: revisited        # database = this protocol's image list
+pca_whitening: false       # true -> PCA-whiten (fit on the held-out dataset) before indexing
+
+backbones:
+  - {name: dinov2_vits14, image_size: 224, poolings: [cls, patch_gem, patch_gap], default_pooling: cls}
+  - {name: resnet50, image_size: 384, poolings: [gem, gap, rmac], default_pooling: gem}
+  - {name: efficientnet_b0, image_size: 384, poolings: [gem, gap, rmac], default_pooling: gem}
+  - {name: clip_vitb32, image_size: 224, poolings: [cls, patch_gem, patch_gap], default_pooling: cls}
+  - {name: hsv_hist, poolings: [none], default_pooling: none}
+  - {name: hog, poolings: [none], default_pooling: none}
+
+indexes: [flat, hnsw, ivfpq]
+rerankers: [none, aqe, alpha_qe, sv, aqe+sv]
+
+# Built during warm-up, before /ready reports ready. Anything else is built lazily on the
+# first request that needs it (that request then takes as long as the extraction).
+prebuild:
+  - {backbone: dinov2_vits14, pooling: cls, index: flat}
+  - {backbone: dinov2_vits14, pooling: cls, index: hnsw}
+  - {backbone: hsv_hist, pooling: none, index: flat}
+
+index_defaults:
+  flat: {}
+  hnsw: {m: 16, ef_construct: 128, ef: 64}
+  ivfpq: {nlist: 64, m: 16, nbits: 8, nprobe: 8}
+
+rerank_defaults:
+  aqe: {top_n: 3}
+  alpha_qe: {top_n: 3, alpha: 3.0}
+  sv: {top_k: 20, min_inliers: 12}
+
+default_k: 20
+max_k: 100

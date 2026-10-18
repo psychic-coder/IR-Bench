@@ -1,0 +1,13 @@
+# Fallback for builders without per-Dockerfile ignore files (docker/*.Dockerfile.dockerignore
+# take precedence under BuildKit). Never send datasets, results or local caches.
+data/
+results/
+.git/
+**/node_modules
+**/.next
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.venv
+.env

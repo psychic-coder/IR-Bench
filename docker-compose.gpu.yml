@@ -1,0 +1,25 @@
+# NVIDIA GPU override. Requires the NVIDIA driver and the NVIDIA Container Toolkit on the host.
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml --profile benchmark run --rm benchmark
+# The backend is rebuilt with CUDA 12.1 PyTorch wheels and tagged :gpu. Feature extraction
+# runs on the GPU (DEVICE=auto detects CUDA); FAISS stays on CPU (faiss-cpu).
+x-gpu: &gpu
+  build:
+    context: .
+    dockerfile: docker/backend.Dockerfile
+    args:
+      TORCH_VARIANT: cu121
+  image: irbench-backend:gpu
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+
+services:
+  api:
+    <<: *gpu
+  benchmark:
+    <<: *gpu

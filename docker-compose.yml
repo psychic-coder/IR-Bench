@@ -1,0 +1,157 @@
+# One command:  docker compose up --build
+# Optional profiles:
+#   docker compose --profile benchmark run --rm benchmark   (or: make bench / make bench-fast)
+#   docker compose --profile loadtest  run --rm loadtest    (or: make loadtest)
+# GPU: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+name: irbench
+
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: docker/backend.Dockerfile
+    args:
+      TORCH_VARIANT: ${TORCH_VARIANT:-cpu}
+  image: irbench-backend:${IMAGE_TAG:-cpu}
+  user: "${APP_UID:-1000}:${APP_GID:-1000}"
+  init: true
+
+x-backend-env: &backend-env
+  SEED: ${SEED:-42}
+  DEVICE: ${DEVICE:-auto}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  AUTO_DOWNLOAD: ${AUTO_DOWNLOAD:-true}
+  KEEP_ARCHIVES: ${KEEP_ARCHIVES:-false}
+  BATCH_SIZE: ${BATCH_SIZE:-16}
+  NUM_THREADS: ${NUM_THREADS:-}
+  DISTRACTOR_DIR: ${DISTRACTOR_DIR:-/data/distractors}
+  QDRANT_URL: http://qdrant:6333
+  REDIS_URL: redis://redis:6379/0
+  OXFORD_IMAGES_URL: ${OXFORD_IMAGES_URL:-}
+  OXFORD_GT_URL: ${OXFORD_GT_URL:-}
+  PARIS_IMAGES_1_URL: ${PARIS_IMAGES_1_URL:-}
+  PARIS_IMAGES_2_URL: ${PARIS_IMAGES_2_URL:-}
+  PARIS_GT_URL: ${PARIS_GT_URL:-}
+  ROXFORD_GND_URL: ${ROXFORD_GND_URL:-}
+  RPARIS_GND_URL: ${RPARIS_GND_URL:-}
+
+services:
+  redis:
+    image: redis:7.4.1-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "${REDIS_MAXMEMORY:-512mb}", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    environment:
+      QDRANT__TELEMETRY_DISABLED: "true"
+      QDRANT__LOG_LEVEL: WARN
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    <<: *backend
+    command: ["irbench", "serve", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      <<: *backend-env
+      API_CONFIG: ${API_CONFIG:-api.yaml}
+      API_DATASET: ${API_DATASET:-}
+      API_DATASET_SUBSET: ${API_DATASET_SUBSET:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-10}
+      CACHE_TTL_SECONDS: ${CACHE_TTL_SECONDS:-86400}
+    volumes:
+      - ./data:/data
+      - ./results:/results
+      - ./configs:/app/configs:ro
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 6
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+    image: irbench-ui:${IMAGE_TAG:-cpu}
+    environment:
+      API_INTERNAL_URL: http://api:8000
+    ports:
+      - "${UI_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 6
+    restart: unless-stopped
+
+  benchmark:
+    <<: *backend
+    profiles: ["benchmark"]
+    command: ["irbench", "bench", "--config", "${BENCH_CONFIG:-full}.yaml"]
+    environment:
+      <<: *backend-env
+      DATASET_SUBSET: ${DATASET_SUBSET:-}
+      README_PATH: /workspace/README.md
+    volumes:
+      - ./data:/data
+      - ./results:/results
+      - ./configs:/app/configs:ro
+      - ./README.md:/workspace/README.md
+    depends_on:
+      qdrant:
+        condition: service_healthy
+
+  loadtest:
+    image: grafana/k6:0.55.0
+    profiles: ["loadtest"]
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    command: ["run", "/scripts/search.js"]
+    environment:
+      API_URL: http://api:8000
+      K6_MAX_VUS: ${K6_MAX_VUS:-10}
+      K6_DURATION_SCALE: ${K6_DURATION_SCALE:-1}
+      K6_COLD_RATIO: ${K6_COLD_RATIO:-0.3}
+      K6_BACKBONE: ${K6_BACKBONE:-dinov2_vits14}
+      K6_INDEX: ${K6_INDEX:-hnsw}
+      K6_P95_WARM_MS: ${K6_P95_WARM_MS:-1500}
+      K6_P95_COLD_MS: ${K6_P95_COLD_MS:-4000}
+      K6_MAX_ERROR_RATE: ${K6_MAX_ERROR_RATE:-0.01}
+      RESULTS_DIR: /results/loadtest
+    volumes:
+      - ./loadtest:/scripts:ro
+      - ./results:/results
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  qdrant_storage:

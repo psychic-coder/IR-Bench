@@ -1,0 +1,26 @@
+# local environment
+.env
+.venv/
+*.egg-info/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# data, caches and outputs (mounted volumes)
+data/*
+!data/.gitkeep
+results/*
+!results/.gitkeep
+
+# frontend
+frontend/node_modules/
+frontend/.next/
+frontend/coverage/
+frontend/*.tsbuildinfo
+frontend/.env*.local
+
+# editors / OS
+.idea/
+.vscode/
+.DS_Store

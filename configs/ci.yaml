@@ -1,0 +1,98 @@
+# CI / offline smoke test on the procedurally generated toy datasets (toy_a, toy_b).
+# Neural backbones are random-initialised (pretrained: false) so the run needs no network
+# access; it exercises every code path (both protocols, PCA, all indexes, all re-rankers,
+# distractors, reports) but its numbers carry no information about retrieval quality.
+name: ci
+seed: 42
+datasets: [toy_a, toy_b]
+protocols: [revisited]
+subset: null
+eval_depth: 1000
+ann_recall_k: 10
+warmup_queries: 2
+batch_size: 8
+device: cpu
+hard_query_ap_threshold: 0.3
+hard_query_top: 20
+headline: {protocol: revisited, setup: medium}
+distractors:
+  dir: null
+  download_archives: 0
+  max_size: 60
+  synthetic_for_toy: true
+
+defaults:
+  extractor: {name: hsv_hist, image_size: null}
+  pooling: {name: null, p: 3.0}
+  postprocess: {pca: none, dim: null}
+  index: {type: flat, params: {}}
+  rerank:
+    name: none
+    params:
+      aqe: {top_n: 2}
+      alpha_qe: {top_n: 2, alpha: 3.0}
+      sv: {top_k: 10, min_inliers: 8}
+  distractors: 0
+
+experiments:
+  - name: families
+    ablation: i
+    protocols: [revisited, original]
+    runs:
+      - {extractor: {name: hog}}
+      - {extractor: {name: hsv_hist}}
+      - {extractor: {name: resnet50, image_size: 128, pretrained: false}, pooling: {name: gem}}
+      - {extractor: {name: dinov2_vits14, image_size: 112, pretrained: false}, pooling: {name: cls}}
+
+  - name: pooling_cnn
+    ablation: b
+    base: {extractor: {name: efficientnet_b0, image_size: 128, pretrained: false}}
+    grid:
+      pooling.name: [gap, gem, rmac]
+
+  - name: gem_p_sweep
+    ablation: b
+    base: {extractor: {name: efficientnet_b0, image_size: 128, pretrained: false}, pooling: {name: gem}}
+    grid:
+      pooling.p: [1.0, 3.0]
+
+  - name: multiscale
+    ablation: j
+    base: {extractor: {name: efficientnet_b0, image_size: 128, pretrained: false}, pooling: {name: gem}}
+    grid:
+      extractor.scales: [[1.0], [1.0, 0.7071, 1.4142]]
+
+  - name: pca_whitening
+    ablation: g
+    grid:
+      postprocess: [{pca: none}, {pca: whiten, dim: 32}, {pca: pca, dim: 32}]
+
+  - name: hnsw_ef
+    ablation: c
+    base: {index: {type: hnsw, params: {m: 8, ef_construct: 32}}}
+    grid:
+      index.params.ef: [1, 4, 16]
+
+  - name: ivfpq_nprobe
+    ablation: d
+    base: {index: {type: ivfpq, params: {nlist: 4, m: 16, nbits: 4}}}
+    grid:
+      index.params.nprobe: [1, 2, 4]
+
+  - name: ivfpq_memory
+    ablation: a
+    runs:
+      - {index: {type: flat}}
+      - {index: {type: ivfpq, params: {nlist: 2, m: 64, nbits: 4, nprobe: 2}}}
+      - {index: {type: ivfpq, params: {nlist: 2, m: 16, nbits: 4, nprobe: 2}}}
+
+  - name: reranking
+    ablation: f
+    grid:
+      rerank.name: [none, aqe, alpha_qe, sv, aqe+sv]
+
+  - name: scale
+    ablation: h
+    datasets: [toy_a]
+    grid:
+      distractors: [0, 30, 60]

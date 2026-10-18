@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools==75.6.0", "wheel==0.45.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "irbench"
+version = "1.0.0"
+description = "Image Retrieval Benchmark Engine: classical vs. CNN vs. transformer features at scale"
+requires-python = ">=3.11,<3.12"
+license = { text = "MIT" }
+
+[project.scripts]
+irbench = "irbench.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["../tests"]
+addopts = "-ra"
+timeout = 600
+filterwarnings = [
+  "ignore::DeprecationWarning",
+  "ignore::UserWarning",
+]

@@ -1,0 +1,23 @@
+# Ruff linter + formatter configuration for all Python in the repository
+# (backend/src, tests, scripts). Run from the repository root: `ruff check . && ruff format --check .`
+line-length = 110
+target-version = "py311"
+src = ["backend/src", "tests", "scripts"]
+extend-exclude = ["frontend", "data", "results", "loadtest"]
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP", "N", "SIM", "RUF"]
+ignore = [
+  "N803",   # argument names like X / Q are conventional for matrices
+  "N806",   # variable names like X / Q are conventional for matrices
+  "B008",   # FastAPI dependency injection uses calls in defaults
+  "RUF012", # mutable class attributes are used for registries
+  "N812",   # `import torch.nn.functional as F` is the PyTorch convention
+]
+
+[lint.isort]
+known-first-party = ["irbench"]
+
+[format]
+quote-style = "double"
+indent-style = "space"
