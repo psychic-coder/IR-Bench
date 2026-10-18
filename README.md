@@ -76,6 +76,9 @@ Prerequisites: Docker Engine with Compose v2 (Docker Desktop on macOS/Windows). 
 
 ```bash
 git clone <this repository> irbench && cd irbench
+# Convenience target; equivalent to the docker compose command below.
+make up
+# Or run Compose directly:
 docker compose up --build
 ```
 
