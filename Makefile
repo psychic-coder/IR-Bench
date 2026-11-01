@@ -9,7 +9,7 @@ ABL        ?= c
 ABL_SUBSET ?=
 
 .DEFAULT_GOAL := help
-.PHONY: help up up-gpu down logs ps bench bench-fast bench-ci bench-ablation bench-gpu report loadtest test test-backend test-frontend lint clean env
+.PHONY: help up up-offline toy-data up-gpu down logs ps bench bench-fast bench-ci bench-ablation bench-gpu report loadtest test test-backend test-frontend lint clean env
 
 help: ## list targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -20,6 +20,14 @@ env: ## create .env from .env.example (keeps an existing .env) and set APP_UID/A
 up: env ## build and start api, ui, redis, qdrant (detached)
 	$(COMPOSE) up --build -d
 	@echo "UI:  http://localhost:$(UI_PORT)    API: http://localhost:$(API_PORT)/docs    readiness: http://localhost:$(API_PORT)/ready"
+
+up-offline: env ## start the UI/API without downloading Oxford data or model weights
+	API_CONFIG=api.ci.yaml AUTO_DOWNLOAD=false $(COMPOSE) up --build -d
+	@echo "Offline UI:  http://localhost:$(UI_PORT)    API: http://localhost:$(API_PORT)/docs    readiness: http://localhost:$(API_PORT)/ready"
+
+toy-data: env ## regenerate the deterministic synthetic toy_a dataset
+	$(COMPOSE) build api
+	$(COMPOSE) run --rm --no-deps api python /app/scripts/generate_toy_a.py --output /data --seed $${TOY_SEED:-42}
 
 up-gpu: env ## same as up, with the NVIDIA override
 	$(COMPOSE) $(GPU_FILES) up --build -d
